@@ -1,6 +1,7 @@
 Require Import List.
 Require Import Lia.
 Require Import Coq.NArith.BinNatDef.
+Require Coq.Program.Wf.
 
 (* Definition of a record with a value and a property bound to it
 that ensures that values of this type have less than 32 bits *)
@@ -162,3 +163,29 @@ Program Definition BigNum_Add(a b : BigNum) : BigNum :=
 Next Obligation.
 lia.
 Qed.
+
+Program Fixpoint BigNum_cons_aux (n_bin : N)  {measure (N.to_nat n_bin)} : list uint32_t :=
+  match n_bin with
+  | N0     => nil
+  | _ as n =>
+    let (div, rem) := N.div_eucl n uint32_t_mod in
+    let u32_rem := Build_uint32_t rem _ in
+    let uint32_t_list := BigNum_cons_aux div in
+    u32_rem::uint32_t_list
+  end.
+Next Obligation. (* Need to prove again that x mod 2^32 < 2^32 *)
+admit.
+Admitted.
+Next Obligation. (* Need to prove that the recursive call argument is decreasing for Coq *)
+admit.
+Admitted.
+
+Program Definition BigNum_cons (n : nat) : BigNum :=
+  let n_bin := N.of_nat(n) in
+  let limbs := BigNum_cons_aux n_bin in
+  Build_BigNum limbs (length limbs) _.
+
+Lemma BigNum_Nat_Equiv : forall (a b c : nat), (Nat.add a b) = c <-> BigNum_Add (BigNum_cons a) (BigNum_cons b) = (BigNum_cons c).
+Proof.
+admit.
+Admitted.
