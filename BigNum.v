@@ -1,6 +1,6 @@
 Require Import List.
 Require Import Lia.
-Require Import Coq.NArith.BinNatDef.
+Require Import Coq.NArith.BinNatDef BinNat.
 Require Coq.Program.Wf.
 
 (* Definition of a record with a value and a property bound to it
@@ -29,20 +29,20 @@ Record BigNum := {
   H_nlimbs_equal_to_limbs_length : length limbs = nlimbs
 }.
 
-Program Definition add_32_with_carry (a b : uint32_t)
-                                     : (uint32_t * uint32_t) :=
-  let a_b_add := N.add (value a) (value b) in
-  if (Compare_dec.lt_dec 32 (N.size_nat a_b_add)) then
-    let a_b_rem := N.modulo a_b_add uint32_t_mod in
-    (Build_uint32_t a_b_rem _, uint32_t_0)
-  else
-    (Build_uint32_t a_b_add _, uint32_t_1).
+Program Definition uint32_t_add (a b : uint32_t) : uint32_t :=
+  let a_b_add := N.modulo (N.add (value a) (value b)) uint32_t_mod in
+  Build_uint32_t a_b_add _.
 Next Obligation. (* Need to prove that x mod 2^32 < 2^32 *)
 admit.
 Admitted.
-Next Obligation.
-lia.
-Qed.
+
+Definition add_32_with_carry (a b : uint32_t)
+                             : (uint32_t * uint32_t) :=
+  let a_b_add := uint32_t_add a b in
+  if (orb (N.ltb a_b_add a) (N.ltb a_b_add b)) then
+    (a_b_add, uint32_t_1)
+  else
+    (a_b_add, uint32_t_0).
 
 Program Fixpoint common_limbs (a_limbs b_limbs : list uint32_t)
                               (previous_loop_carry : uint32_t)
@@ -185,7 +185,77 @@ Program Definition BigNum_cons (n : nat) : BigNum :=
   let limbs := BigNum_cons_aux n_bin in
   Build_BigNum limbs (length limbs) _.
 
-Lemma BigNum_Nat_Equiv : forall (a b c : nat), (Nat.add a b) = c <-> BigNum_Add (BigNum_cons a) (BigNum_cons b) = (BigNum_cons c).
+Lemma BigNum_Nat_Equiv : forall (a b c : nat), (Nat.add a b) = c <->
+                         BigNum_Add (BigNum_cons a) (BigNum_cons b) = (BigNum_cons c).
 Proof.
 admit.
 Admitted.
+
+Lemma uint32_t_add_res_ge_args : forall a b c : nat,
+                                 forall a_u32 b_u32 a_b_add : uint32_t,
+                                 value a_u32 = N.of_nat a
+                              -> value b_u32 = N.of_nat b
+                              -> c = a + b
+                              -> a_b_add = uint32_t_add a_u32 b_u32
+                              -> c < N.to_nat uint32_t_mod
+                              -> N.ge (value a_b_add) (value a_u32)
+                              /\ N.ge (value a_b_add) (value b_u32).
+Proof.
+admit.
+Admitted.
+
+Lemma uint32_t_add_res_lt_args : forall a b c : nat,
+                                 forall a_u32 b_u32 a_b_add : uint32_t,
+                                 value a_u32 = N.of_nat a
+                              -> value b_u32 = N.of_nat b
+                              -> c = a + b
+                              -> a_b_add = uint32_t_add a_u32 b_u32
+                              -> c >= N.to_nat uint32_t_mod
+                              -> N.lt (value a_b_add) (value a_u32)
+                              \/ N.lt (value a_b_add) (value b_u32).
+Proof.
+intros.
+unfold uint32_t_add in H2.
+admit.
+Admitted.
+
+Lemma add_32_with_carry_spec : forall a b c : nat,
+                               forall a_u32 b_u32 c_u32 carry : uint32_t,
+                               (value a_u32) = N.of_nat a
+                            -> (value b_u32) = N.of_nat b
+                            -> c = a + b
+                            -> c_u32 = uint32_t_add a_u32 b_u32
+                            -> add_32_with_carry a_u32 b_u32 = (c_u32, carry)
+                            -> (c < N.to_nat uint32_t_mod
+                                -> carry = uint32_t_0)
+                            /\ (c >= N.to_nat uint32_t_mod
+                                -> carry = uint32_t_1).
+Proof.
+intros a b c a_u32 b_u32 c_u32 carry.
+intros H_a_u32 H_b_u32 H_c H_c_u32.
+intro H_add_32_with_carry.
+split; intros H_cmp;
+unfold add_32_with_carry in H_add_32_with_carry;
+rewrite H_c_u32 in H_add_32_with_carry;
+rewrite <- H_c_u32 in H_add_32_with_carry;
+destruct (orb (N.ltb c_u32 a_u32) (N.ltb c_u32 b_u32)) as []eqn:?.
+- contradict Heqb0.
+  apply Bool.not_true_iff_false.
+  apply Bool.orb_false_intro;
+  apply N.ltb_ge;
+  pose proof uint32_t_add_res_ge_args as H_args_lt_sum;
+  destruct (H_args_lt_sum a b c a_u32 b_u32 c_u32) as [H_a_u32_lt_sum H_b_u32_lt_sum];
+  try assumption; lia.
+- symmetry.
+  inversion H_add_32_with_carry.
+  reflexivity.
+- symmetry.
+  inversion H_add_32_with_carry.
+  reflexivity.
+- contradict Heqb0.
+  apply Bool.not_false_iff_true.
+  apply Bool.orb_true_intro.
+  repeat rewrite N.ltb_lt.
+  pose proof uint32_t_add_res_lt_args as H_sum_lt_args.
+  apply (H_sum_lt_args a b c a_u32 b_u32 c_u32); assumption.
+Qed.
